@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sign in | Practice Mentor</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f7fb;color:#172033;font-family:system-ui,sans-serif}.shell{width:min(420px,calc(100% - 32px));background:#fff;border:1px solid #dce3ee;border-radius:18px;padding:32px;box-shadow:0 18px 50px #17203318}h1{margin:0 0 8px;letter-spacing:-.03em}.muted{color:#65728a;margin:0 0 24px}label{display:block;font-weight:600;margin:14px 0 6px}input,button{width:100%;padding:12px;border-radius:8px;font:inherit}input{border:1px solid #cbd5e1}button{border:0;background:#1e5eff;color:white;cursor:pointer;margin-top:12px}.secondary{background:#eef3ff;color:#1644a0}.link{display:block;text-align:center;margin-top:18px;color:#1644a0;text-decoration:none}.status{white-space:pre-wrap;background:#f1f5fa;border-radius:8px;padding:12px;margin-top:18px;min-height:44px}.tabs{display:flex;gap:8px;margin-bottom:14px}.tabs button{margin:0;background:#eef3ff;color:#1644a0}.tabs button.active{background:#172033;color:#fff}
+  </style>
+</head>
+<body>
+<section class="shell">
+  <h1>Welcome back</h1><p class="muted">Sign in to continue your saved practice history.</p>
+  <div class="tabs"><button id="login-tab" class="active" onclick="showLogin()">Sign in</button><button id="signup-tab" onclick="showSignup()">Create account</button></div>
+  <div id="form-title">Sign in to Practice Mentor</div>
+  <label>Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+  <label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Your password">
+  <button id="submit-button" onclick="submitAuth()">Sign in</button>
+  <button class="secondary" onclick="continueGuest()">Continue as guest</button>
+  <div id="status" class="status">Checking Firebase configuration...</div>
+  <a class="link" href="/">Back to practice</a>
+</section>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut, reload } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+let auth=null, signup=false;
+const status=document.querySelector('#status');
+const config=await fetch('/api/firebase-config').then(r=>r.json());
+if(config.enabled){auth=getAuth(initializeApp(config));status.textContent='';}else{status.textContent='Firebase is not configured. Guest mode will use local storage.';}
+window.showLogin=()=>{signup=false;document.querySelector('#login-tab').classList.add('active');document.querySelector('#signup-tab').classList.remove('active');document.querySelector('#form-title').textContent='Sign in to Practice Mentor';document.querySelector('#submit-button').textContent='Sign in';};
+window.showSignup=()=>{signup=true;document.querySelector('#signup-tab').classList.add('active');document.querySelector('#login-tab').classList.remove('active');document.querySelector('#form-title').textContent='Create your account';document.querySelector('#submit-button').textContent='Create account';};
+window.continueGuest=async()=>{if(!auth){window.location='/';return;}try{await signInAnonymously(auth);window.location='/';}catch(e){status.textContent='Guest Firebase sign-in is unavailable. You can continue locally from the practice page.';}};
+window.submitAuth=async()=>{const email=document.querySelector('#email').value.trim(),password=document.querySelector('#password').value;if(!auth){status.textContent='Configure Firebase before using accounts.';return;}try{if(signup){const result=await createUserWithEmailAndPassword(auth,email,password);await sendEmailVerification(result.user);await signOut(auth);status.textContent=`Verification email sent to ${email}. Open the link, then return here to sign in.`;}else{const result=await signInWithEmailAndPassword(auth,email,password);await reload(result.user);await result.user.getIdToken(true);if(!result.user.emailVerified){await sendEmailVerification(result.user);await signOut(auth);status.textContent='Your email is not verified. A new verification link was sent.';return;}window.location='/';}}catch(e){status.textContent=e.message;}};
+</script>
+</body>
+</html>

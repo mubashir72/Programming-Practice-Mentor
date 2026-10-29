@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Programming Practice Mentor</title>
+  <style>
+    body{font-family:system-ui,sans-serif;max-width:1080px;margin:0 auto;padding:0 22px 40px;color:#172033;background:#f6f8fb}.topbar{display:flex;justify-content:space-between;align-items:center;padding:22px 0 18px;border-bottom:1px solid #dce3ee}.brand{font-weight:800;letter-spacing:-.02em}.account-wrap{position:relative}.account-button{width:auto;background:#172033;border-radius:999px;padding:9px 16px;margin:0}.account-panel{position:absolute;z-index:5;right:0;top:48px;width:310px;background:#fff;border:1px solid #dce3ee;border-radius:12px;padding:16px;box-shadow:0 12px 30px #17203325}.hidden{display:none}main{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px}.card{background:white;border:1px solid #dce3ee;border-radius:12px;padding:20px;box-shadow:0 2px 8px #17203312}h1{margin:28px 0 4px}h2{font-size:1.1rem}label{display:block;margin:10px 0 4px;font-weight:600}input,select,textarea,button{width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9d3e2;border-radius:7px;font:inherit}textarea{min-height:220px;font-family:ui-monospace,monospace}button{background:#1e5eff;color:white;border:0;margin-top:12px;cursor:pointer}.muted{color:#63708a}.result{white-space:pre-wrap;background:#f1f5fa;border-radius:8px;padding:12px}.pill{display:inline-block;background:#e7efff;color:#1644a0;padding:4px 8px;border-radius:999px;margin:2px}@media(max-width:750px){main{grid-template-columns:1fr}.account-panel{right:-8px;width:280px}}
+  </style>
+</head>
+<body>
+<header class="topbar"><div class="brand">Practice Mentor</div><div class="account-wrap"><button id="account-button" class="account-button" onclick="toggleAccountPanel()">Guest · Sign in</button><div id="account-panel" class="account-panel hidden"><p id="auth-status" class="result">Checking account...</p><button onclick="window.location='/auth'">Sign in or create account</button><button onclick="continueAsGuest()">Continue as guest</button><button onclick="loadHistory()">Load saved history</button><p id="history" class="result">No saved history loaded.</p></div></div></header>
+<h1>Programming Practice Mentor</h1><p class="muted">Practice with feedback that remembers your progress.</p>
+<main>
+<section class="card"><h2>1. Learner profile</h2>
+  <label>Name</label><input id="name" value="Demo Learner">
+  <label>Language</label><select id="language"><option value="python">Python</option><option value="javascript">JavaScript</option><option value="cpp">C++</option><option value="c">C</option><option value="java">Java</option><option value="kotlin">Kotlin</option><option value="csharp">C#</option><option value="dart">Dart</option><option value="r">R</option></select>
+  <label>Skill level</label><select id="level"><option>beginner</option><option>intermediate</option></select>
+  <label>Topic</label><select id="topic"><option value="default">Default adaptive mix</option><option value="array_bounds">Arrays and indexing</option><option value="edge_cases">Edge cases</option><option value="loops">Loops and conditions</option><option value="list_operations">List operations</option><option value="big_tech">Big Tech Interview Challenges</option></select>
+  <button onclick="createLearner()">Create learner</button><p id="profile" class="result">No learner loaded.</p>
+</section>
+<section class="card"><h2>2. Current exercise</h2><button onclick="startSession()">Start next session</button><button onclick="resumeSession()">Resume saved session</button><p id="exercise" class="result">No exercise loaded.</p>
+  <textarea id="code" placeholder="Your solution will appear here"></textarea><button onclick="submitCode()">Evaluate submission</button>
+</section>
+<section class="card"><h2>3. Mentor result</h2><div id="feedback" class="result">Submit code to see evaluation and feedback.</div></section>
+<section class="card"><h2>4. Audit evidence</h2><button onclick="loadAudit()">Refresh action log</button><div id="audit" class="result">No events loaded.</div></section>
+</main>
+<script>
+let learnerId=null,sessionId=null;
+function toggleAccountPanel(){document.querySelector('#account-panel').classList.toggle('hidden')}
+const json=async(url,opts={})=>{const headers={'Content-Type':'application/json',...(opts.headers||{})};if(window.firebaseHeaders)Object.assign(headers,await window.firebaseHeaders());const r=await fetch(url,{...opts,headers});const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d};
+async function createLearner(){const d=await json('/api/learners',{method:'POST',body:JSON.stringify({name:document.querySelector('#name').value,language:document.querySelector('#language').value,skill_level:document.querySelector('#level').value,topic:document.querySelector('#topic').value})});learnerId=d.id;localStorage.setItem('mentor_learner_id',String(learnerId));showProfile(d)}
+function showProfile(d){document.querySelector('#profile').innerHTML=`<b>${d.name}</b><br>Skill: ${d.skill_level}<br>Topic: ${d.topic||'default'}<br>Attempts: ${d.attempts}<br>Error counts: ${JSON.stringify(d.error_counts)}<br>Recent: ${d.recent_errors.map(x=>`<span class="pill">${x}</span>`).join('')}`}
+async function restoreLocalLearner(){const saved=localStorage.getItem('mentor_learner_id');if(!saved)return;try{learnerId=Number(saved);const d=await json(`/api/learners/${learnerId}`);showProfile(d);await loadHistory();await resumeSession()}catch(e){localStorage.removeItem('mentor_learner_id')}}
+async function loadSavedAccount(){try{const me=await json('/api/me');if(me.learners?.length){const saved=me.learners[0];learnerId=saved.id;localStorage.setItem('mentor_learner_id',String(learnerId));showProfile(saved);await loadHistory();await resumeSession();document.querySelector('#account-button').textContent=me.email||'Guest · Saved';}}catch(e){console.warn('Could not restore account data',e)}}
+async function startSession(){if(!learnerId)return alert('Create a learner first');const d=await json(`/api/learners/${learnerId}/sessions`,{method:'POST'});sessionId=d.session_id;document.querySelector('#exercise').textContent=`${d.exercise.title}\n\n${d.exercise.description}\n\nTopic: ${d.exercise.topic} | Difficulty: ${d.exercise.difficulty}`;document.querySelector('#code').value=d.exercise.starter_code}
+async function resumeSession(){if(!learnerId)return alert('Create a learner first');const d=await json(`/api/learners/${learnerId}/resume`);if(!d.found)return alert('No saved session found.');sessionId=d.session_id;document.querySelector('#exercise').textContent=`${d.exercise.title}\n\n${d.exercise.description}\n\nTopic: ${d.exercise.topic} | Difficulty: ${d.exercise.difficulty}\n\nSaved status: ${d.status}`;document.querySelector('#code').value=d.exercise.starter_code}
+async function submitCode(){if(!sessionId)return alert('Start a session first');const d=await json('/api/submissions',{method:'POST',body:JSON.stringify({session_id:sessionId,code:document.querySelector('#code').value,idempotency_key:crypto.randomUUID()})});document.querySelector('#feedback').textContent=`Result:\n${JSON.stringify(d.result,null,2)}\n\nFeedback:\n${d.feedback}\n\nPlan:\n${JSON.stringify(d.plan,null,2)}`;showProfile(d.profile);loadAudit()}
+async function loadAudit(){if(!learnerId)return;const d=await json(`/api/learners/${learnerId}/audit`);document.querySelector('#audit').textContent=d.map(x=>`${x.timestamp} | ${x.type}\n${JSON.stringify(x.payload)}`).join('\n\n')||'No events.'}
+async function loadHistory(){if(!learnerId)return alert('Create or load a learner first');const d=await json(`/api/learners/${learnerId}/history`);const attempts=(d.cloud.attempts||[]).length+(d.local_attempts||[]).length;document.querySelector('#history').textContent=`Saved attempts: ${attempts}\nCloud sessions: ${(d.cloud.sessions||[]).length}\nLocal attempts: ${(d.local_attempts||[]).length}`}
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, linkWithCredential, EmailAuthProvider, sendEmailVerification, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+let auth = null;
+const status = document.querySelector('#auth-status');
+const config = await fetch('/api/firebase-config').then(r => r.json());
+if (!config.enabled) { status.textContent = 'Local guest mode. Add Firebase settings for cloud history.'; window.restoreLocalLearner(); }
+else { auth = getAuth(initializeApp(config)); onAuthStateChanged(auth, async user => { status.textContent = user ? `${user.isAnonymous ? 'Guest' : 'Signed in'}: ${user.email || 'anonymous'} — history is saved.` : 'Not signed in.'; document.querySelector('#account-button').textContent = user ? (user.email || 'Guest · Saved') : 'Guest · Sign in'; if (user) await window.loadSavedAccount(); }); }
+window.firebaseHeaders = async () => auth?.currentUser ? {Authorization:`Bearer ${await auth.currentUser.getIdToken(true)}`} : {};
+window.clearFirebaseSession = async () => { if (auth?.currentUser) await signOut(auth); status.textContent='Your Firebase session expired. Please sign in again.'; document.querySelector('#account-button').textContent='Guest · Sign in'; };
+window.continueAsGuest = async () => { if (!auth) { status.textContent='Local guest mode active. History is stored locally.'; return; } try { await signInAnonymously(auth); } catch (e) { auth=null; status.textContent='Firebase guest sign-in is unavailable. Local guest mode is active.'; document.querySelector('#account-button').textContent='Local guest'; } };
+window.registerAccount = async () => { if (!auth) return alert('Configure Firebase first.'); const email=document.querySelector('#email').value, password=document.querySelector('#password').value; const result=auth.currentUser?.isAnonymous ? await linkWithCredential(auth.currentUser, EmailAuthProvider.credential(email,password)) : await createUserWithEmailAndPassword(auth,email,password); await sendEmailVerification(result.user); await signOut(auth); status.textContent=`Verification email sent to ${email}. Open the link, then log in.`; };
+window.loginAccount = async () => { if (!auth) return alert('Configure Firebase first.'); const result=await signInWithEmailAndPassword(auth,document.querySelector('#email').value,document.querySelector('#password').value); if (!result.user.emailVerified) { await sendEmailVerification(result.user); await signOut(auth); status.textContent='Email is not verified. A new verification link was sent.'; return; } };
+window.resendVerification = async () => { if (!auth) return alert('Configure Firebase first.'); try { const result=await signInWithEmailAndPassword(auth,document.querySelector('#email').value,document.querySelector('#password').value); if (result.user.emailVerified) { status.textContent='Email is already verified. You can log in.'; return; } await sendEmailVerification(result.user); await signOut(auth); status.textContent='Verification link sent again.'; } catch (e) { status.textContent=e.message; } };
+</script>
+</body></html>
